@@ -11,35 +11,44 @@
   returns the file descriptor for the upstream pipe.
   =========================*/
 int server_handshake(int *to_client) {
+  //remove("WKP");
   printf("Creating well known pipe\n");
     int pipe_f;
     if ((pipe_f = mkfifo("WKP", 0644)) == -1) {
     printf("Error %d: %s\n", errno, strerror(errno));
   }
   printf("Connecting to WKP\n");
-  while(1){
-    int fd;
-    if(fd = open("WKP", O_RDONLY) == -1){
+    int wkp_fd;
+    if(wkp_fd = open("WKP", O_RDONLY) == -1){
       printf("Error %d: %s\n", errno, strerror(errno));
     }
+  printf("Connected to WKP\n");
 
-    printf("Connected to WKP\n");
+  printf("Waiting for client to respond\n");
 
-    char * msg = malloc(BUFFER_SIZE);
-    read(fd, msg, BUFFER_SIZE);
-    printf("Client said: %s", msg);
-    close(fd);
+  char msg[BUFFER_SIZE];
+  read(wkp_fd, msg, BUFFER_SIZE);
+  //printf("Client said: %s", msg);
 
-    printf("Sending message\n" );
-    fd = open("WKP", O_WRONLY);
-    char S_client[BUFFER_SIZE];
-    fgets(S_client, BUFFER_SIZE, stdin);
-    write(fd, S_client, BUFFER_SIZE);
+  int pvt_fd;
+  pvt_fd = open(msg, O_WRONLY);
 
-    close(fd);
-  }
+    printf("Sending message to client \n" );
 
-  return 0;
+    write(pvt_fd,ACK,HANDSHAKE_BUFFER_SIZE);
+  //  printf("server sent client ACK message: %s\n",ACK);
+
+    printf("waiting for response from client\n");
+
+    char ack_mes[HANDSHAKE_BUFFER_SIZE];
+    read(wkp_fd, ack_mes, HANDSHAKE_BUFFER_SIZE);
+  //  printf("read message: %s\n", ack_mes);
+
+    printf("Response connection is established with client \n" );
+    remove("WKP");
+
+    *to_client = pvt_fd;
+    return wkp_fd;
 }
 
 
@@ -53,27 +62,32 @@ int server_handshake(int *to_client) {
   returns the file descriptor for the downstream pipe.
   =========================*/
 int client_handshake(int *to_server) {
-  int pipe_f;
-  if ((pipe_f = mkfifo("PRVP", 0644)) == -1) {
-  //  printf("Error %d: %s\n", errno, strerror(errno));
+  int pvt_fd;
+  if ((pvt_fd = mkfifo("PRVP", 0644)) == -1) {
+    printf("Error %d: %s\n", errno, strerror(errno));
   }
-  int fd;
-  while (1) {
-    fd = open("PRVP", O_WRONLY);
 
-    char s_msg[BUFFER_SIZE];
-    fgets(s_msg, BUFFER_SIZE, stdin);
-    write(fd, s_msg, BUFFER_SIZE);
+  printf("Trying to connect to well known pipe\n");
+    int wkp_fd;
+    wkp_fd = open("WPK", O_WRONLY);
 
-    close(fd);
+  printf("Connected to WKP\n");
 
-    fd = open("PRVP", O_RDONLY);
+  printf("Private pipe opened and writing it's file to the well known pipe\n");
 
-    char * buf = malloc(BUFFER_SIZE);
-    read(fd, buf, BUFFER_SIZE);
-    printf("Server said: %s", buf);
+  pvt_fd = open("PRVP", O_RDONLY);
 
-    close(fd);
-  }
-  return 0;
+    printf("Waiting for response from server\n");
+    char ack_mes[HANDSHAKE_BUFFER_SIZE];
+    read(pvt_fd, ack_mes, HANDSHAKE_BUFFER_SIZE);
+
+    printf("Response recieved from server, sending message\n" );
+
+    write(wkp_fd, ack_mes, HANDSHAKE_BUFFER_SIZE);
+
+    printf("Message sent. Connection established with server\n");
+
+    remove("PRVP");
+    *to_server = wkp_fd;
+    return pvt_fd;
 }
